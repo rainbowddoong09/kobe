@@ -1,3 +1,4 @@
+
 import pandas as pd
 import plotly.express as px
 import requests
@@ -133,7 +134,6 @@ unmatched_df = df_year[~df_year["sigungu_code"].isin(geojson_codes)]
 # 시도 필터 적용
 if selected_sido != "전국":
     df_filtered = df_year[df_year["시도명"] == selected_sido].copy()
-    # 해당 시도의 GeoJSON 피처만 추출하여 영역 확대 및 필터링
     filtered_features = [
         f
         for f in geojson_data["features"]
@@ -152,10 +152,9 @@ col1, col2, col3 = st.columns(3)
 
 # 전국 평균 비율 계산
 nat_total_pop = df_year["total_pop"].sum()
-if is_senior:
-    nat_target_pop = df_year["senior_pop"].sum()
-else:
-    nat_target_pop = df_year["youth_pop"].sum()
+nat_target_pop = (
+    df_year["senior_pop"].sum() if is_senior else df_year["youth_pop"].sum()
+)
 nat_rate = (
     (nat_target_pop / nat_total_pop * 100) if nat_total_pop > 0 else 0.0
 )
@@ -164,10 +163,81 @@ nat_rate = (
 max_row = df_year.loc[df_year[target_col].idxmax()]
 min_row = df_year.loc[df_year[target_col].idxmin()]
 
-# 시군구 명칭을 GeoJSON 속성에서 매핑하여 가져오기
+# 시군구 명칭 매핑
 code_to_name = {
     f["properties"]["코드"]: f"{f['properties']['시도']} {f['properties']['시군구']}"
     for f in geojson_data["features"]
 }
-max_name = code_to_name.get(
-    max_row["sigungu_code"],
+max_code = str(max_row["sigungu_code"])
+min_code = str(min_row["sigungu_code"])
+max_name = code_to_name.get(max_code, f"코드({max_code})")
+min_name = code_to_name.get(min_code, f"코드({min_code})")
+
+with col1:
+    st.metric(
+        label=f"전국 평균 {target_col} ({selected_year}년)",
+        value=f"{nat_rate:.2f}%",
+    )
+with col2:
+    st.metric(
+        label="가장 높은 시군구",
+        value=f"{max_row[target_col]:.2f}%",
+        delta=max_name,
+        delta_color="normal",
+    )
+with col3:
+    st.metric(
+        label="가장 낮은 시군구",
+        value=f"{min_row[target_col]:.2f}%",
+        delta=min_name,
+        delta_color="normal",
+    )
+
+st.markdown("---")
+
+# --- 색상 구간 및 범주 설정 ---
+if is_senior:
+    # 고령화율 고정 구간: [0, 19, 23, 28, 38, max]
+    bounds = [0, 19, 23, 28, 38, max(45.0, df_all["고령화율"].max())]
+    colorscale = "Reds"
+else:
+    # 유소년 비율 구간: [0, 6, 9, 12, 15, max]
+    bounds = [0, 6, 9, 12, 15, max(20.0, df_all["유소년 비율"].max())]
+    colorscale = "Blues"
+
+# --- Plotly Choropleth 생성 ---
+fig = px.choropleth(
+    df_filtered,
+    geojson=current_geojson,
+    locations="sigungu_code",
+    featureidkey="properties.코드",
+    color=target_col,
+    color_continuous_scale=colorscale,
+    range_color=(bounds[0], bounds[-1]),
+    labels={target_col: f"{target_col} (%)"},
+)
+
+# 지도 스타일 및 바운드 설정
+fig.update_geos(fitbounds="locations", visible=False)
+
+hover_text = (
+    f"<b>%{{properties.시도}} %{{properties.시군구}}</b><br>{target_col}: %{{z:.2f}}%<extra></extra>"
+)
+fig.update_traces(
+    hovertemplate=hover_text, marker_line_width=0.5, marker_line_color="gray"
+)
+
+fig.update_layout(
+    margin={"r": 0, "t": 10, "l": 0, "b": 0},
+    coloraxis_colorbar=dict(title=f"{target_col} (%)"),
+)
+
+# 지도 출력
+st.plotly_chart(fig, use_container_width=True)
+
+# --- 미매칭 행정구역 안내 문구 ---
+if not unmatched_df.empty:
+    st.caption(
+        f"⚠️ **안내**: {selected_year}년 데이터 중 일부 옛 행정구역 코드({len(unmatched_df)}건)는 "
+        "현재 경계 지도 파일과 일치하지 않아 지도에서 **회색**으로 표시되거나 생략되었을 수 있습니다."
+    )
