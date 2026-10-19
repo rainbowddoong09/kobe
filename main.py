@@ -91,26 +91,4 @@ with col3:
     selected_dong = st.selectbox("읍·면·동 선택", dong_list)
 
 # ----------------------------------------------------
-# 4. 선택한 동네의 인구 데이터 가공 및 지표 계산
-# ----------------------------------------------------
-# 최종 선택된 지역의 데이터 1행(Row) 추출
-target_data = df_sigungu[df_sigungu['동'] == selected_dong].iloc[0]
-
-# 연령 라벨 생성 (0세, 1세, ..., 99세, 100세 이상)
-age_labels = [f"{i}세" for i in range(100)] + ["100세 이상"]
-
-# 남/여 및 통합 연령별 인구수 수집
-male_pop = []
-female_pop = []
-total_age_counts = []
-
-for idx, age in enumerate(age_labels):
-    m_val = int(target_data.get(f"남_{age}", 0))
-    f_val = int(target_data.get(f"여_{age}", 0))
-    
-    male_pop.append(-m_val)  # 그래프 왼쪽 표시용 음수
-    female_pop.append(f_val)
-    total_age_counts.append(m_val + f_val)
-
-# 주요 지표 계산
-total_pop = sum(total_
+# 4.
